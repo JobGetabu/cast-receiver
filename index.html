@@ -48,6 +48,20 @@
   <cast-media-player></cast-media-player>
 
   <script>
+    // Filter out noisy Cast framework logs
+    const originalConsoleLog = console.log;
+    console.log = function(...args) {
+      const msg = args.join(' ');
+      // Filter out IPC/WebSocket connection messages (these are normal)
+      if (msg.includes('IpcChannel') ||
+          msg.includes('WebSocket') ||
+          msg.includes('reconnect attempt') ||
+          msg.includes('Opening net websocket')) {
+        return; // Don't log these
+      }
+      originalConsoleLog.apply(console, args);
+    };
+
     // Helper to update status on screen
     function updateStatus(message, type = 'info') {
       const statusDiv = document.getElementById('statusMessage');
@@ -59,6 +73,10 @@
 
     // Catch any errors
     window.onerror = function(msg, url, lineNo, columnNo, error) {
+      // Don't show WebSocket connection "errors" - these are normal
+      if (msg.includes('WebSocket') || msg.includes('ws://localhost')) {
+        return true; // Suppress these
+      }
       console.error('Global error:', { msg, url, lineNo, columnNo, error });
       updateStatus('❌ Error: ' + msg, 'error');
       return false;
