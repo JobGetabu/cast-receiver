@@ -26,61 +26,10 @@
     const context = cast.framework.CastReceiverContext.getInstance();
     const playerManager = context.getPlayerManager();
 
-    // Configure playback to add CloudFront cookies to HLS requests
-    const playbackConfig = new cast.framework.PlaybackConfig();
+    // Store cookies from the load request
+    let currentCookies = null;
 
-    // Helper function to get custom data from the current load request
-    function getCustomData() {
-      try {
-        const loadRequestData = playerManager.getLoadRequestData();
-        return loadRequestData?.media?.customData;
-      } catch (error) {
-        console.error('Error getting custom data:', error);
-        return null;
-      }
-    }
-
-    // Add cookies to manifest requests (HLS playlist)
-    playbackConfig.manifestRequestHandler = (requestInfo) => {
-      const customData = getCustomData();
-
-      if (customData?.headers?.Cookie) {
-        console.log('Adding cookies to manifest request');
-        requestInfo.headers = requestInfo.headers || {};
-        requestInfo.headers['Cookie'] = customData.headers.Cookie;
-      }
-
-      return requestInfo;
-    };
-
-    // Add cookies to segment requests (HLS video/audio chunks)
-    playbackConfig.segmentRequestHandler = (requestInfo) => {
-      const customData = getCustomData();
-
-      if (customData?.headers?.Cookie) {
-        requestInfo.headers = requestInfo.headers || {};
-        requestInfo.headers['Cookie'] = customData.headers.Cookie;
-      }
-
-      return requestInfo;
-    };
-
-    // Optional: Add cookies to license requests (if using DRM)
-    playbackConfig.licenseRequestHandler = (requestInfo) => {
-      const customData = getCustomData();
-
-      if (customData?.headers?.Cookie) {
-        requestInfo.headers = requestInfo.headers || {};
-        requestInfo.headers['Cookie'] = customData.headers.Cookie;
-      }
-
-      return requestInfo;
-    };
-
-    // Set the playback configuration
-    playerManager.setPlaybackConfig(playbackConfig);
-
-    // Log media load events for debugging
+    // Intercept LOAD message to capture cookies
     playerManager.setMessageInterceptor(
       cast.framework.messages.MessageType.LOAD,
       (loadRequestData) => {
@@ -90,9 +39,56 @@
           hasCustomData: !!loadRequestData.media?.customData,
           hasCookies: !!loadRequestData.media?.customData?.headers?.Cookie
         });
+
+        // Store cookies for use in request handlers
+        if (loadRequestData.media?.customData?.headers?.Cookie) {
+          currentCookies = loadRequestData.media.customData.headers.Cookie;
+          console.log('🍪 Captured cookies, length:', currentCookies.length);
+        } else {
+          console.warn('⚠️ No cookies found in customData');
+          currentCookies = null;
+        }
+
         return loadRequestData;
       }
     );
+
+    // Configure playback to add CloudFront cookies to HLS requests
+    const playbackConfig = new cast.framework.PlaybackConfig();
+
+    // Add cookies to manifest requests (HLS playlist)
+    playbackConfig.manifestRequestHandler = (requestInfo) => {
+      if (currentCookies) {
+        console.log('📄 Adding cookies to manifest request');
+        requestInfo.headers = requestInfo.headers || {};
+        requestInfo.headers['Cookie'] = currentCookies;
+      } else {
+        console.warn('⚠️ No cookies available for manifest request');
+      }
+      return requestInfo;
+    };
+
+    // Add cookies to segment requests (HLS video/audio chunks)
+    playbackConfig.segmentRequestHandler = (requestInfo) => {
+      if (currentCookies) {
+        requestInfo.headers = requestInfo.headers || {};
+        requestInfo.headers['Cookie'] = currentCookies;
+      }
+      return requestInfo;
+    };
+
+    // Optional: Add cookies to license requests (if using DRM)
+    playbackConfig.licenseRequestHandler = (requestInfo) => {
+      if (currentCookies) {
+        console.log('🔐 Adding cookies to license request');
+        requestInfo.headers = requestInfo.headers || {};
+        requestInfo.headers['Cookie'] = currentCookies;
+      }
+      return requestInfo;
+    };
+
+    // Set the playback configuration
+    playerManager.setPlaybackConfig(playbackConfig);
 
     // Log playback state changes
     playerManager.addEventListener(
@@ -105,7 +101,11 @@
     playerManager.addEventListener(
       cast.framework.events.EventType.ERROR,
       (event) => {
-        console.error('❌ Playback error:', event.detailedErrorCode, event.error);
+        console.error('❌ Playback error:', {
+          detailedErrorCode: event.detailedErrorCode,
+          error: event.error,
+          reason: event.reason
+        });
       }
     );
 
