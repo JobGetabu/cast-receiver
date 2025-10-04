@@ -33,19 +33,22 @@
     playerManager.setMessageInterceptor(
       cast.framework.messages.MessageType.LOAD,
       (loadRequestData) => {
-        console.log('🎬 Load request received:', {
-          contentUrl: loadRequestData.media?.contentUrl,
-          contentType: loadRequestData.media?.contentType,
-          hasCustomData: !!loadRequestData.media?.customData,
-          hasCookies: !!loadRequestData.media?.customData?.headers?.Cookie
-        });
+        console.log('🎬 Load request received:');
+        console.log('  - contentUrl:', loadRequestData.media?.contentUrl);
+        console.log('  - contentType:', loadRequestData.media?.contentType);
+        console.log('  - customData:', loadRequestData.media?.customData);
+        console.log('  - hasCustomData:', !!loadRequestData.media?.customData);
+        console.log('  - hasCookies:', !!loadRequestData.media?.customData?.headers?.Cookie);
 
         // Store cookies for use in request handlers
         if (loadRequestData.media?.customData?.headers?.Cookie) {
           currentCookies = loadRequestData.media.customData.headers.Cookie;
-          console.log('🍪 Captured cookies, length:', currentCookies.length);
+          console.log('🍪 Captured cookies!');
+          console.log('  - Length:', currentCookies.length);
+          console.log('  - Preview:', currentCookies.substring(0, 100) + '...');
         } else {
-          console.warn('⚠️ No cookies found in customData');
+          console.warn('⚠️ No cookies found in customData!');
+          console.warn('  - customData:', loadRequestData.media?.customData);
           currentCookies = null;
         }
 
@@ -58,12 +61,17 @@
 
     // Add cookies to manifest requests (HLS playlist)
     playbackConfig.manifestRequestHandler = (requestInfo) => {
+      console.log('📄 Manifest request handler called');
+      console.log('  - URL:', requestInfo.url);
+      console.log('  - Has cookies:', !!currentCookies);
+
       if (currentCookies) {
-        console.log('📄 Adding cookies to manifest request');
+        console.log('✅ Adding cookies to manifest request');
         requestInfo.headers = requestInfo.headers || {};
         requestInfo.headers['Cookie'] = currentCookies;
+        console.log('  - Headers set:', Object.keys(requestInfo.headers));
       } else {
-        console.warn('⚠️ No cookies available for manifest request');
+        console.error('❌ No cookies available for manifest request!');
       }
       return requestInfo;
     };
