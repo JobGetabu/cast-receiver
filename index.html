@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WeR1 Cast Receiver</title>
+  <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #000;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+    cast-media-player {
+      --theme-hue: 200;
+      --progress-color: rgba(255, 255, 255, 0.9);
+      --splash-image: url('');
+      width: 100%;
+      height: 100%;
+    }
+    #status {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 15px;
+      border-radius: 8px;
+      font-size: 14px;
+      max-width: 400px;
+      z-index: 1000;
+    }
+    .success { color: #4CAF50; }
+    .warning { color: #FF9800; }
+    .error { color: #F44336; }
+  </style>
+</head>
+<body>
+  <div id="status">
+    <div class="success">✅ WeR1 Receiver Ready</div>
+    <div id="statusMessage">Waiting for media...</div>
+  </div>
+  <cast-media-player></cast-media-player>
+
+  <script>
+    // Helper to update status on screen
+    function updateStatus(message, type = 'info') {
+      const statusDiv = document.getElementById('statusMessage');
+      if (statusDiv) {
+        statusDiv.className = type;
+        statusDiv.innerHTML = message;
+      }
+    }
+
+    // Catch any errors
+    window.onerror = function(msg, url, lineNo, columnNo, error) {
+      console.error('Global error:', { msg, url, lineNo, columnNo, error });
+      updateStatus('❌ Error: ' + msg, 'error');
+      return false;
+    };
+
+    const context = cast.framework.CastReceiverContext.getInstance();
+    const playerManager = context.getPlayerManager();
+
+    // Store cookies from the load request
+    let currentCookies = null;
+
+    // Intercept LOAD message to capture cookies
+    playerManager.setMessageInterceptor(
+      cast.framework.messages.MessageType.LOAD,
+      (loadRequestData) => {
+        updateStatus('📡 Loading media...', 'info');
+
+        console.log('🎬 Load request received:');
+        console.log('  - contentUrl:', loadRequestData.media?.contentUrl);
+        console.log('  - contentType:', loadRequestData.media?.contentType);
+        console.log('  - customData:', loadRequestData.media?.customData);
+        console.log('  - hasCustomData:', !!loadRequestData.media?.customData);
+        console.log('  - hasCookies:', !!loadRequestData.media?.customData?.headers?.Cookie);
+
+        // Store cookies for use in request handlers
+        if (loadRequestData.media?.customData?.headers?.Cookie) {
+          currentCookies = loadRequestData.media.customData.headers.Cookie;
+          console.log('🍪 Captured cookies!');
+          console.log('  - Length:', currentCookies.length);
+          console.log('  - Preview:', currentCookies.substring(0, 100) + '...');
+          updateStatus('🍪 Cookies captured (' + currentCookies.length + ' chars)', 'success');
+        } else {
+          console.warn('⚠️ No cookies found in customData!');
+          console.warn('  - customData:', loadRequestData.media?.customData);
+          currentCookies = null;
+          updateStatus('⚠️ No cookies in request!', 'warning');
+        }
+
+        return loadRequestData;
+      }
+    );
+
+    // Configure playback to add CloudFront cookies to HLS requests
+    const playbackConfig = new cast.framework.PlaybackConfig();
+
+    // Add cookies to manifest requests (HLS playlist)
+    playbackConfig.manifestRequestHandler = (requestInfo) => {
+      console.log('📄 Manifest request handler called');
+      console.log('  - URL:', requestInfo.url);
+      console.log('  - Has cookies:', !!currentCookies);
+
+      if (currentCookies) {
+        console.log('✅ Adding cookies to manifest request');
+        requestInfo.headers = requestInfo.headers || {};
+        requestInfo.headers['Cookie'] = currentCookies;
+        console.log('  - Headers set:', Object.keys(requestInfo.headers));
+      } else {
+        console.error('❌ No cookies available for manifest request!');
+      }
+      return requestInfo;
+    };
+
+    // Add cookies to segment requests (HLS video/audio chunks)
+    playbackConfig.segmentRequestHandler = (requestInfo) => {
+      if (currentCookies) {
+        requestInfo.headers = requestInfo.headers || {};
+        requestInfo.headers['Cookie'] = currentCookies;
+      }
+      return requestInfo;
+    };
+
+    // Optional: Add cookies to license requests (if using DRM)
+    playbackConfig.licenseRequestHandler = (requestInfo) => {
+      if (currentCookies) {
+        console.log('🔐 Adding cookies to license request');
+        requestInfo.headers = requestInfo.headers || {};
+        requestInfo.headers['Cookie'] = currentCookies;
+      }
+      return requestInfo;
+    };
+
+    // Set the playback configuration
+    playerManager.setPlaybackConfig(playbackConfig);
+
+    // Log playback state changes
+    playerManager.addEventListener(
+      cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
+      () => {
+        console.log('✅ Media loaded successfully');
+        updateStatus('✅ Playing!', 'success');
+      }
+    );
+
+    playerManager.addEventListener(
+      cast.framework.events.EventType.PLAYING,
+      () => {
+        console.log('▶️ Playback started');
+        updateStatus('▶️ Playing', 'success');
+      }
+    );
+
+    playerManager.addEventListener(
+      cast.framework.events.EventType.ERROR,
+      (event) => {
+        console.error('❌ Playback error:', {
+          detailedErrorCode: event.detailedErrorCode,
+          error: event.error,
+          reason: event.reason
+        });
+        updateStatus('❌ Error: ' + (event.detailedErrorCode || 'Unknown'), 'error');
+      }
+    );
+
+    // Start the receiver application
+    const options = new cast.framework.CastReceiverOptions();
+    options.disableIdleTimeout = false;
+    options.maxInactivity = 3600; // 1 hour
+
+    context.start(options);
+
+    console.log('🎵 WeR1 Cast Receiver started');
+  </script>
+</body>
+</html>
