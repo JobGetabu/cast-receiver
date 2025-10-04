@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WeR1 Cast Receiver</title>
+  <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #000;
+      overflow: hidden;
+    }
+    cast-media-player {
+      --theme-hue: 200;
+      --progress-color: rgba(255, 255, 255, 0.9);
+      --splash-image: url('');
+    }
+  </style>
+</head>
+<body>
+  <cast-media-player></cast-media-player>
+
+  <script>
+    const context = cast.framework.CastReceiverContext.getInstance();
+    const playerManager = context.getPlayerManager();
+
+    // Configure playback to add CloudFront cookies to HLS requests
+    const playbackConfig = new cast.framework.PlaybackConfig();
+
+    // Helper function to get custom data from the current load request
+    function getCustomData() {
+      try {
+        const loadRequestData = playerManager.getLoadRequestData();
+        return loadRequestData?.media?.customData;
+      } catch (error) {
+        console.error('Error getting custom data:', error);
+        return null;
+      }
+    }
+
+    // Add cookies to manifest requests (HLS playlist)
+    playbackConfig.manifestRequestHandler = (requestInfo) => {
+      const customData = getCustomData();
+
+      if (customData?.headers?.Cookie) {
+        console.log('Adding cookies to manifest request');
+        requestInfo.headers = requestInfo.headers || {};
+        requestInfo.headers['Cookie'] = customData.headers.Cookie;
+      }
+
+      return requestInfo;
+    };
+
+    // Add cookies to segment requests (HLS video/audio chunks)
+    playbackConfig.segmentRequestHandler = (requestInfo) => {
+      const customData = getCustomData();
+
+      if (customData?.headers?.Cookie) {
+        requestInfo.headers = requestInfo.headers || {};
+        requestInfo.headers['Cookie'] = customData.headers.Cookie;
+      }
+
+      return requestInfo;
+    };
+
+    // Optional: Add cookies to license requests (if using DRM)
+    playbackConfig.licenseRequestHandler = (requestInfo) => {
+      const customData = getCustomData();
+
+      if (customData?.headers?.Cookie) {
+        requestInfo.headers = requestInfo.headers || {};
+        requestInfo.headers['Cookie'] = customData.headers.Cookie;
+      }
+
+      return requestInfo;
+    };
+
+    // Set the playback configuration
+    playerManager.setPlaybackConfig(playbackConfig);
+
+    // Log media load events for debugging
+    playerManager.setMessageInterceptor(
+      cast.framework.messages.MessageType.LOAD,
+      (loadRequestData) => {
+        console.log('🎬 Load request received:', {
+          contentUrl: loadRequestData.media?.contentUrl,
+          contentType: loadRequestData.media?.contentType,
+          hasCustomData: !!loadRequestData.media?.customData,
+          hasCookies: !!loadRequestData.media?.customData?.headers?.Cookie
+        });
+        return loadRequestData;
+      }
+    );
+
+    // Log playback state changes
+    playerManager.addEventListener(
+      cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
+      () => {
+        console.log('✅ Media loaded successfully');
+      }
+    );
+
+    playerManager.addEventListener(
+      cast.framework.events.EventType.ERROR,
+      (event) => {
+        console.error('❌ Playback error:', event.detailedErrorCode, event.error);
+      }
+    );
+
+    // Start the receiver application
+    const options = new cast.framework.CastReceiverOptions();
+    options.disableIdleTimeout = false;
+    options.maxInactivity = 3600; // 1 hour
+
+    context.start(options);
+
+    console.log('🎵 WeR1 Cast Receiver started');
+  </script>
+</body>
+</html>
