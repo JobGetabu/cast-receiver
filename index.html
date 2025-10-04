@@ -127,14 +127,19 @@
       console.log('📄 Manifest request handler called');
       console.log('  - URL:', requestInfo.url);
       console.log('  - Has cookies:', !!currentCookies);
+      console.log('  - Request method:', requestInfo.method);
+      console.log('  - Current headers:', requestInfo.headers);
 
       if (currentCookies) {
         console.log('✅ Adding cookies to manifest request');
         requestInfo.headers = requestInfo.headers || {};
         requestInfo.headers['Cookie'] = currentCookies;
-        console.log('  - Headers set:', Object.keys(requestInfo.headers));
+        console.log('  - Cookie preview:', currentCookies.substring(0, 80) + '...');
+        console.log('  - All headers after:', requestInfo.headers);
+        updateStatus('🔄 Loading manifest with cookies...', 'info');
       } else {
         console.error('❌ No cookies available for manifest request!');
+        updateStatus('⚠️ Loading manifest without cookies!', 'warning');
       }
       return requestInfo;
     };
@@ -184,9 +189,24 @@
         console.error('❌ Playback error:', {
           detailedErrorCode: event.detailedErrorCode,
           error: event.error,
-          reason: event.reason
+          reason: event.reason,
+          type: event.type
         });
-        updateStatus('❌ Error: ' + (event.detailedErrorCode || 'Unknown'), 'error');
+
+        // Show detailed error on screen
+        let errorMsg = 'Error: ' + (event.detailedErrorCode || 'Unknown');
+        if (event.detailedErrorCode === 905) {
+          errorMsg += ' (MEDIA_ERROR - Check manifest/cookies)';
+        }
+        updateStatus('❌ ' + errorMsg, 'error');
+      }
+    );
+
+    // Add request interceptor to log network errors
+    playerManager.addEventListener(
+      cast.framework.events.EventType.REQUEST_LOAD,
+      (event) => {
+        console.log('🔄 Load request event:', event);
       }
     );
 
