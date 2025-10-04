@@ -129,11 +129,19 @@
       console.log('  - Has cookies:', !!currentCookies);
       console.log('  - Request method:', requestInfo.method);
       console.log('  - Current headers:', requestInfo.headers);
+      console.log('  - withCredentials before:', requestInfo.withCredentials);
 
       if (currentCookies) {
         console.log('✅ Adding cookies to manifest request');
+
+        // Set withCredentials to true for CORS requests with cookies
+        requestInfo.withCredentials = true;
+
+        // Add cookies as header
         requestInfo.headers = requestInfo.headers || {};
         requestInfo.headers['Cookie'] = currentCookies;
+
+        console.log('  - withCredentials after:', requestInfo.withCredentials);
         console.log('  - Cookie preview:', currentCookies.substring(0, 80) + '...');
         console.log('  - All headers after:', requestInfo.headers);
         updateStatus('🔄 Loading manifest with cookies...', 'info');
@@ -147,6 +155,7 @@
     // Add cookies to segment requests (HLS video/audio chunks)
     playbackConfig.segmentRequestHandler = (requestInfo) => {
       if (currentCookies) {
+        requestInfo.withCredentials = true;
         requestInfo.headers = requestInfo.headers || {};
         requestInfo.headers['Cookie'] = currentCookies;
       }
