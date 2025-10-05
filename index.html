@@ -152,13 +152,28 @@
           cloudFrontParams = parseCookiesToQueryParams(currentCookies);
           console.log('🔑 Parsed CloudFront params:', cloudFrontParams);
 
+          // Validate that we have all required params
+          const hasAllParams = cloudFrontParams['Key-Pair-Id'] &&
+                               cloudFrontParams['Policy'] &&
+                               cloudFrontParams['Signature'];
+
+          if (!hasAllParams) {
+            console.error('❌ Missing CloudFront params!', {
+              hasKeyPairId: !!cloudFrontParams['Key-Pair-Id'],
+              hasPolicy: !!cloudFrontParams['Policy'],
+              hasSignature: !!cloudFrontParams['Signature']
+            });
+            updateStatus('❌ Failed to parse cookies!', 'error');
+          }
+
           // Convert contentUrl to signed URL
-          if (loadRequestData.media?.contentUrl) {
+          if (loadRequestData.media?.contentUrl && hasAllParams) {
             const originalUrl = loadRequestData.media.contentUrl;
             const signedUrl = addQueryParamsToUrl(originalUrl, cloudFrontParams);
 
             console.log('🔗 Original URL:', originalUrl);
             console.log('🔗 Signed URL:', signedUrl);
+            console.log('🔗 URL has all params:', signedUrl.includes('Key-Pair-Id') && signedUrl.includes('Policy') && signedUrl.includes('Signature'));
 
             // Replace the contentUrl with signed URL
             loadRequestData.media.contentUrl = signedUrl;
