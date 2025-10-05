@@ -147,12 +147,24 @@
     }
 
     // Add query parameters to URL
+    // Note: CloudFront signatures contain ~ which should NOT be encoded
     function addQueryParamsToUrl(url, params) {
-      const urlObj = new URL(url);
-      Object.keys(params).forEach(key => {
-        urlObj.searchParams.set(key, params[key]);
-      });
-      return urlObj.toString();
+      // Build query string manually to avoid encoding ~ characters
+      const queryParts = [];
+
+      if (params['Key-Pair-Id']) {
+        queryParts.push('Key-Pair-Id=' + params['Key-Pair-Id']);
+      }
+      if (params['Policy']) {
+        queryParts.push('Policy=' + params['Policy']);
+      }
+      if (params['Signature']) {
+        // CloudFront signatures should NOT have ~ encoded
+        queryParts.push('Signature=' + params['Signature']);
+      }
+
+      const separator = url.includes('?') ? '&' : '?';
+      return url + separator + queryParts.join('&');
     }
 
     // Intercept LOAD message to capture cookies and convert to signed URL
