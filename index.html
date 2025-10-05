@@ -238,16 +238,22 @@
       console.log('  - URL:', requestInfo.url);
       console.log('  - Has CloudFront params:', Object.keys(cloudFrontParams).length > 0);
 
+      addDebugLog('📄 Manifest request');
+
       // Add CloudFront params to manifest URL
       if (Object.keys(cloudFrontParams).length > 0) {
         const signedUrl = addQueryParamsToUrl(requestInfo.url, cloudFrontParams);
         console.log('✅ Adding CloudFront params to manifest');
         console.log('  - Original:', requestInfo.url);
         console.log('  - Signed:', signedUrl);
+
+        addDebugLog('Manifest URL: ' + signedUrl.substring(0, 80) + '...');
+
         requestInfo.url = signedUrl;
         updateStatus('🔄 Loading manifest with signed URL...', 'info');
       } else {
         console.error('❌ No CloudFront params available!');
+        addDebugLog('❌ No params for manifest!');
         updateStatus('⚠️ Loading manifest without auth!', 'warning');
       }
       return requestInfo;
