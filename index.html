@@ -99,13 +99,21 @@
 
       cookies.forEach(cookie => {
         const trimmed = cookie.trim();
-        if (trimmed.includes('CloudFront-Key-Pair-Id=')) {
-          params['Key-Pair-Id'] = trimmed.split('=')[1];
-        } else if (trimmed.includes('CloudFront-Policy=')) {
-          params['Policy'] = trimmed.split('=')[1];
-        } else if (trimmed.includes('CloudFront-Signature=')) {
-          params['Signature'] = trimmed.split('=')[1];
+
+        // Parse each cookie properly (handle = in values)
+        if (trimmed.startsWith('CloudFront-Key-Pair-Id=')) {
+          params['Key-Pair-Id'] = trimmed.substring('CloudFront-Key-Pair-Id='.length);
+        } else if (trimmed.startsWith('CloudFront-Policy=')) {
+          params['Policy'] = trimmed.substring('CloudFront-Policy='.length);
+        } else if (trimmed.startsWith('CloudFront-Signature=')) {
+          params['Signature'] = trimmed.substring('CloudFront-Signature='.length);
         }
+      });
+
+      console.log('🔍 Parsed params:', {
+        'Key-Pair-Id': params['Key-Pair-Id'],
+        'Policy length': params['Policy']?.length,
+        'Signature length': params['Signature']?.length
       });
 
       return params;
