@@ -28,22 +28,34 @@
       position: fixed;
       top: 20px;
       left: 20px;
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(0, 0, 0, 0.9);
       padding: 15px;
       border-radius: 8px;
-      font-size: 14px;
-      max-width: 400px;
+      font-size: 12px;
+      max-width: 90%;
+      max-height: 90%;
+      overflow-y: auto;
       z-index: 1000;
+      font-family: monospace;
+    }
+    #debugLog {
+      margin-top: 10px;
+      font-size: 11px;
+      color: #ccc;
+      max-height: 500px;
+      overflow-y: auto;
     }
     .success { color: #4CAF50; }
     .warning { color: #FF9800; }
     .error { color: #F44336; }
+    .log-line { margin: 2px 0; }
   </style>
 </head>
 <body>
   <div id="status">
     <div class="success">✅ WeR1 Receiver Ready</div>
     <div id="statusMessage">Waiting for media...</div>
+    <div id="debugLog"></div>
   </div>
   <cast-media-player></cast-media-player>
 
@@ -68,6 +80,21 @@
       if (statusDiv) {
         statusDiv.className = type;
         statusDiv.innerHTML = message;
+      }
+    }
+
+    // Helper to add debug log on screen
+    function addDebugLog(message) {
+      const debugLog = document.getElementById('debugLog');
+      if (debugLog) {
+        const logLine = document.createElement('div');
+        logLine.className = 'log-line';
+        logLine.textContent = message;
+        debugLog.appendChild(logLine);
+        // Keep only last 20 lines
+        while (debugLog.children.length > 20) {
+          debugLog.removeChild(debugLog.firstChild);
+        }
       }
     }
 
@@ -152,6 +179,10 @@
           cloudFrontParams = parseCookiesToQueryParams(currentCookies);
           console.log('🔑 Parsed CloudFront params:', cloudFrontParams);
 
+          // Show on TV
+          addDebugLog('Policy len: ' + (cloudFrontParams['Policy']?.length || 0));
+          addDebugLog('Sig len: ' + (cloudFrontParams['Signature']?.length || 0));
+
           // Validate that we have all required params
           const hasAllParams = cloudFrontParams['Key-Pair-Id'] &&
                                cloudFrontParams['Policy'] &&
@@ -163,7 +194,10 @@
               hasPolicy: !!cloudFrontParams['Policy'],
               hasSignature: !!cloudFrontParams['Signature']
             });
+            addDebugLog('❌ Missing params!');
             updateStatus('❌ Failed to parse cookies!', 'error');
+          } else {
+            addDebugLog('✅ All params parsed!');
           }
 
           // Convert contentUrl to signed URL
@@ -174,6 +208,8 @@
             console.log('🔗 Original URL:', originalUrl);
             console.log('🔗 Signed URL:', signedUrl);
             console.log('🔗 URL has all params:', signedUrl.includes('Key-Pair-Id') && signedUrl.includes('Policy') && signedUrl.includes('Signature'));
+
+            addDebugLog('URL: ' + signedUrl.substring(0, 100) + '...');
 
             // Replace the contentUrl with signed URL
             loadRequestData.media.contentUrl = signedUrl;
