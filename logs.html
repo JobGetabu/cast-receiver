@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cast Receiver Logs</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: 'Courier New', monospace;
+      background: #1e1e1e;
+      color: #d4d4d4;
+    }
+    .header {
+      background: #252526;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 18px;
+      color: #4CAF50;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      background: #0e639c;
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    button:hover {
+      background: #1177bb;
+    }
+    button.danger {
+      background: #f44336;
+    }
+    button.danger:hover {
+      background: #da190b;
+    }
+    .log-container {
+      background: #252526;
+      padding: 15px;
+      border-radius: 8px;
+      max-height: 80vh;
+      overflow-y: auto;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .log-entry {
+      margin: 4px 0;
+      padding: 4px 0;
+      border-bottom: 1px solid #333;
+    }
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+    .time {
+      color: #858585;
+      margin-right: 10px;
+    }
+    .level {
+      margin-right: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-weight: bold;
+      font-size: 10px;
+    }
+    .level.ERROR {
+      background: #f44336;
+      color: white;
+    }
+    .level.WARN {
+      background: #ff9800;
+      color: black;
+    }
+    .level.INFO, .level.SUCCESS {
+      background: #4caf50;
+      color: white;
+    }
+    .level.LOG {
+      background: #2196F3;
+      color: white;
+    }
+    .message {
+      color: #d4d4d4;
+      word-break: break-word;
+    }
+    .no-logs {
+      text-align: center;
+      padding: 40px;
+      color: #858585;
+      font-size: 14px;
+    }
+    .stats {
+      background: #1e1e1e;
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      font-size: 11px;
+      color: #858585;
+    }
+    .auto-refresh {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #d4d4d4;
+      font-size: 12px;
+    }
+    .auto-refresh input {
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>📋 Cast Receiver Logs</h1>
+    <div class="controls">
+      <div class="auto-refresh">
+        <input type="checkbox" id="autoRefresh" checked>
+        <label for="autoRefresh">Auto-refresh</label>
+      </div>
+      <button onclick="refreshLogs()">🔄 Refresh</button>
+      <button onclick="downloadLogs()">💾 Download</button>
+      <button class="danger" onclick="clearLogs()">🗑️ Clear</button>
+    </div>
+  </div>
+
+  <div class="stats" id="stats">
+    Loading logs...
+  </div>
+
+  <div class="log-container" id="logContainer">
+    <div class="no-logs">No logs available yet. Start casting to see logs appear here.</div>
+  </div>
+
+  <script>
+    let autoRefreshInterval = null;
+
+    function fetchLogs() {
+      // Try to get logs from the main receiver window if it's open
+      return fetch('api/logs')
+        .then(res => res.json())
+        .catch(() => {
+          // Fallback: logs not available via API
+          return { logs: [], error: 'Cannot connect to receiver' };
+        });
+    }
+
+    function formatTime(isoString) {
+      const date = new Date(isoString);
+      return date.toLocaleTimeString() + '.' + date.getMilliseconds().toString().padStart(3, '0');
+    }
+
+    function displayLogs(logs) {
+      const container = document.getElementById('logContainer');
+      const stats = document.getElementById('stats');
+
+      if (!logs || logs.length === 0) {
+        container.innerHTML = '<div class="no-logs">No logs available yet. Start casting to see logs appear here.</div>';
+        stats.textContent = 'Total logs: 0';
+        return;
+      }
+
+      // Count log levels
+      const counts = logs.reduce((acc, log) => {
+        acc[log.level] = (acc[log.level] || 0) + 1;
+        return acc;
+      }, {});
+
+      stats.innerHTML = `
+        Total: ${logs.length} logs |
+        Errors: <span style="color: #f44336">${counts.ERROR || 0}</span> |
+        Warnings: <span style="color: #ff9800">${counts.WARN || 0}</span> |
+        Info: <span style="color: #4caf50">${counts.INFO || 0}</span>
+      `;
+
+      container.innerHTML = logs.map(log => `
+        <div class="log-entry">
+          <span class="time">${formatTime(log.time)}</span>
+          <span class="level ${log.level}">${log.level}</span>
+          <span class="message">${escapeHtml(log.message)}</span>
+        </div>
+      `).join('');
+
+      // Scroll to bottom
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function refreshLogs() {
+      fetchLogs().then(data => {
+        if (data.logs) {
+          displayLogs(data.logs);
+        } else if (data.error) {
+          document.getElementById('logContainer').innerHTML = `
+            <div class="no-logs" style="color: #f44336">
+              ⚠️ ${data.error}<br><br>
+              Make sure the Cast Receiver is running and accessible.
+            </div>
+          `;
+        }
+      });
+    }
+
+    function downloadLogs() {
+      fetchLogs().then(data => {
+        if (data.logs && data.logs.length > 0) {
+          const logText = data.logs.map(log =>
+            `[${log.time}] [${log.level}] ${log.message}`
+          ).join('\n');
+
+          const blob = new Blob([logText], { type: 'text/plain' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `cast-logs-${Date.now()}.txt`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+      });
+    }
+
+    function clearLogs() {
+      if (confirm('Clear all logs?')) {
+        fetch('api/logs', { method: 'DELETE' })
+          .then(() => refreshLogs())
+          .catch(() => alert('Failed to clear logs'));
+      }
+    }
+
+    // Auto-refresh functionality
+    document.getElementById('autoRefresh').addEventListener('change', (e) => {
+      if (e.target.checked) {
+        autoRefreshInterval = setInterval(refreshLogs, 2000);
+      } else {
+        if (autoRefreshInterval) {
+          clearInterval(autoRefreshInterval);
+          autoRefreshInterval = null;
+        }
+      }
+    });
+
+    // Initial load
+    refreshLogs();
+
+    // Start auto-refresh
+    autoRefreshInterval = setInterval(refreshLogs, 2000);
+  </script>
+</body>
+</html>

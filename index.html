@@ -55,23 +55,72 @@
   <div id="status">
     <div class="success">✅ WeR1 Receiver Ready</div>
     <div id="statusMessage">Waiting for media...</div>
+    <div style="margin-top: 10px; padding: 10px; background: rgba(33,150,243,0.2); border-radius: 4px;">
+      <div style="font-size: 10px; margin-bottom: 5px;">📋 View logs at:</div>
+      <div id="logUrl" style="color: #4CAF50; font-weight: bold; word-break: break-all;"></div>
+    </div>
     <div id="debugLog"></div>
   </div>
   <cast-media-player></cast-media-player>
 
   <script>
-    // Filter out noisy Cast framework logs
+    // Logging system - stores logs in window object for HTTP access
+    window.castLogs = [];
+    const MAX_LOGS = 500;
+
+    function timestamp() {
+      return new Date().toISOString();
+    }
+
+    function saveLog(message, level = 'INFO') {
+      const entry = {
+        time: timestamp(),
+        level: level,
+        message: message
+      };
+      window.castLogs.push(entry);
+      if (window.castLogs.length > MAX_LOGS) {
+        window.castLogs.shift();
+      }
+
+      // Send to server API
+      fetch('/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry)
+      }).catch(err => {
+        // Silently fail if server not available
+        console.error('Failed to send log to server:', err);
+      });
+
+      // Show on screen
+      addDebugLog(`${message}`);
+    }
+
+    // Intercept console methods
     const originalConsoleLog = console.log;
+    const originalConsoleError = console.error;
+    const originalConsoleWarn = console.warn;
+
     console.log = function(...args) {
       const msg = args.join(' ');
-      // Filter out IPC/WebSocket connection messages (these are normal)
-      if (msg.includes('IpcChannel') ||
-          msg.includes('WebSocket') ||
-          msg.includes('reconnect attempt') ||
-          msg.includes('Opening net websocket')) {
-        return; // Don't log these
+      if (!msg.includes('IpcChannel') && !msg.includes('WebSocket') &&
+          !msg.includes('reconnect attempt') && !msg.includes('Opening net websocket')) {
+        saveLog(msg, 'LOG');
+        originalConsoleLog.apply(console, args);
       }
-      originalConsoleLog.apply(console, args);
+    };
+
+    console.error = function(...args) {
+      const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ');
+      saveLog(msg, 'ERROR');
+      originalConsoleError.apply(console, args);
+    };
+
+    console.warn = function(...args) {
+      const msg = args.join(' ');
+      saveLog(msg, 'WARN');
+      originalConsoleWarn.apply(console, args);
     };
 
     // Helper to update status on screen
@@ -81,6 +130,7 @@
         statusDiv.className = type;
         statusDiv.innerHTML = message;
       }
+      saveLog(`Status: ${message}`, type.toUpperCase());
     }
 
     // Helper to add debug log on screen
@@ -89,14 +139,29 @@
       if (debugLog) {
         const logLine = document.createElement('div');
         logLine.className = 'log-line';
-        logLine.textContent = message;
+        const timestamp = new Date().toLocaleTimeString();
+        logLine.textContent = `[${timestamp}] ${message}`;
         debugLog.appendChild(logLine);
-        // Keep only last 20 lines
-        while (debugLog.children.length > 20) {
+        while (debugLog.children.length > 30) {
           debugLog.removeChild(debugLog.firstChild);
         }
+        debugLog.scrollTop = debugLog.scrollHeight;
       }
     }
+
+    // Create downloadable log link that updates
+    function updateLogUrl() {
+      const urlDiv = document.getElementById('logUrl');
+      if (urlDiv && window.location) {
+        const logUrl = window.location.origin + '/logs.html';
+        urlDiv.innerHTML = `<a href="${logUrl}" target="_blank" style="color: #4CAF50; text-decoration: none;">${logUrl}</a>`;
+        addDebugLog('📋 Logs available at: ' + logUrl);
+      }
+    }
+
+    setTimeout(updateLogUrl, 1000);
+
+    saveLog('=== Cast Receiver Started ===', 'INFO');
 
     // Catch any errors
     window.onerror = function(msg, url, lineNo, columnNo, error) {
@@ -313,19 +378,24 @@
     playerManager.addEventListener(
       cast.framework.events.EventType.ERROR,
       (event) => {
-        console.error('❌ Playback error:', {
+        const errorDetails = {
           detailedErrorCode: event.detailedErrorCode,
           error: event.error,
           reason: event.reason,
           type: event.type
-        });
+        };
+
+        console.error('❌ Playback error:', errorDetails);
+        saveLog('PLAYBACK ERROR: ' + JSON.stringify(errorDetails), 'ERROR');
 
         // Show detailed error on screen
         let errorMsg = 'Error: ' + (event.detailedErrorCode || 'Unknown');
         if (event.detailedErrorCode === 905) {
           errorMsg += ' (MEDIA_ERROR - Check manifest/cookies)';
+          saveLog('Error 905: Manifest or authentication failed', 'ERROR');
         }
         updateStatus('❌ ' + errorMsg, 'error');
+        addDebugLog('Full error: ' + JSON.stringify(errorDetails));
       }
     );
 
